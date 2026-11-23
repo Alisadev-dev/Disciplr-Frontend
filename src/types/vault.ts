@@ -59,6 +59,7 @@ export interface VaultTransaction {
   amount?: number;
   /** Exact decimal string from the API, preserved so display avoids IEEE-754 float precision loss. */
   rawAmount?: string;
+  fee?: number;
 }
 
 /** Full vault record — canonical shape used across all pages. */
