@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Transactions from '../Transactions';
@@ -13,6 +13,10 @@ vi.mock('../../services/vaultService', async (importOriginal) => {
     listAllActivity: vi.fn(),
   };
 });
+
+vi.mock('../../context/WalletContext', () => ({
+  useWallet: () => ({ network: 'TESTNET' }),
+}));
 
 vi.mock('../../utils/csv', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../utils/csv')>();
@@ -43,17 +47,32 @@ function makeRecord(overrides: Partial<VaultActivityRecord> = {}): VaultActivity
   };
 }
 
-function renderTransactions() {
+function renderTransactions(path = '/') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <Transactions />
     </MemoryRouter>
+  );
+}
+
+function makeRecords(count: number): VaultActivityRecord[] {
+  return Array.from({ length: count }, (_, index) =>
+    makeRecord({
+      id: `act-${index + 1}`,
+      type: index % 5 === 0 ? 'release' : 'create',
+      vault: `Vault ${index + 1}`,
+      amount: index + 1,
+      fee: 0.1,
+      status: index % 2 === 0 ? 'confirmed' : 'pending',
+      timestamp: new Date(index * 1000),
+    })
   );
 }
 
 describe('Transactions page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     useConnectivityStore.getState().reset();
   });
 
@@ -112,8 +131,8 @@ describe('Transactions page', () => {
 
     expect(mockDownloadCsv).toHaveBeenCalledTimes(1);
     const csv = String(mockDownloadCsv.mock.calls[0]?.[0] ?? '');
-    const headerLine = csv.split('\n')[0];
-    expect(headerLine).toBe(toCsv([], 'transactions').split('\n')[0]);
+    const headerLine = csv.split('\n')[0]?.replace(/\r$/, '');
+    expect(headerLine).toBe(toCsv([], 'transactions').split('\n')[0]?.replace(/\r$/, ''));
   });
 
   it('neutralises formula-like memos in the export', async () => {
@@ -174,6 +193,79 @@ describe('Transactions page', () => {
     const rows = screen.getAllByRole('row');
     expect(rows[1]).toHaveTextContent('Newer Vault');
     expect(rows[2]).toHaveTextContent('Older Vault');
+  });
+
+  it('filters by event type and shows totals for all filtered rows', async () => {
+    mockListAllActivity.mockResolvedValueOnce(makeRecords(25));
+
+    renderTransactions();
+
+    fireEvent.change(await screen.findByLabelText('Filter by event type'), {
+      target: { value: 'release' },
+    });
+
+    expect(screen.getAllByText('Funds released')).toHaveLength(5);
+    expect(screen.getByText('Filtered total (5 transactions)')).toBeInTheDocument();
+    expect(screen.getByText('55.00')).toBeInTheDocument();
+    expect(screen.getByText('0.50')).toBeInTheDocument();
+  });
+
+  it('filters by status as well as event type', async () => {
+    mockListAllActivity.mockResolvedValueOnce(makeRecords(25));
+
+    renderTransactions();
+
+    fireEvent.change(await screen.findByLabelText('Filter by event type'), {
+      target: { value: 'release' },
+    });
+    fireEvent.change(screen.getByLabelText('Filter by status'), {
+      target: { value: 'pending' },
+    });
+
+    expect(screen.getAllByText('Funds released')).toHaveLength(2);
+    expect(screen.getByText('Filtered total (2 transactions)')).toBeInTheDocument();
+  });
+
+  it('sorts by amount descending', async () => {
+    mockListAllActivity.mockResolvedValueOnce(makeRecords(25));
+
+    renderTransactions();
+
+    fireEvent.change(await screen.findByLabelText('Sort transactions by'), {
+      target: { value: 'amount' },
+    });
+
+    const dataRows = screen.getAllByRole('row');
+    expect(dataRows[1]).toHaveTextContent('Vault 25');
+  });
+
+  it('paginates to page 2 and clamps an oversized URL page to the last page', async () => {
+    mockListAllActivity.mockResolvedValueOnce(makeRecords(25));
+
+    const { unmount } = renderTransactions();
+    await screen.findByText('Page 1 of 3');
+    fireEvent.click(screen.getByRole('button', { name: 'Go to page 2' }));
+    expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
+    expect(screen.getAllByRole('row')).toHaveLength(12);
+    expect(screen.getByText('Vault 15')).toBeInTheDocument();
+    expect(screen.queryByText('Vault 16')).not.toBeInTheDocument();
+
+    unmount();
+    mockListAllActivity.mockResolvedValueOnce(makeRecords(25));
+    renderTransactions('/?page=99');
+
+    expect(await screen.findByText('Page 3 of 3')).toBeInTheDocument();
+    expect(screen.getByText('Vault 5')).toBeInTheDocument();
+    expect(screen.queryByText('Vault 6')).not.toBeInTheDocument();
+  });
+
+  it('ignores an unknown event type in the URL', async () => {
+    mockListAllActivity.mockResolvedValueOnce(makeRecords(25));
+
+    renderTransactions('/?type=bogus');
+
+    expect(await screen.findByText('Filtered total (25 transactions)')).toBeInTheDocument();
+    expect(screen.getAllByRole('row')).toHaveLength(12);
   });
 
   it('re-triggers loading when connectivity recovers', async () => {
