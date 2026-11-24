@@ -223,6 +223,13 @@ export default function Analytics() {
           Track your vault performance and accountability patterns.
         </p>
       </div>
+                <div style={{ fontSize: '0.75rem', color: stat.up ? 'var(--accent)' : 'var(--danger-text)', display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
+                    <span style={{ color: item.you >= item.platform ? 'var(--accent)' : 'var(--danger-text)', fontWeight: 700 }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--accent)', marginBottom: '0.15rem' }}>You</div>
+                    <span style={{ color: rateGoalMet ? 'var(--accent)' : 'var(--warning-text)' }}>
+                  <div style={{ fontSize: '0.75rem', color: kpis.averageSuccessRate >= Number(goalRate) ? 'var(--accent)' : 'var(--muted)', marginTop: '0.3rem' }}>
+                    <span style={{ color: capitalGoalMet ? 'var(--accent)' : 'var(--warning-text)' }}>
+                  <div style={{ fontSize: '0.75rem', color: kpis.totalCapital >= Number(goalCapital) ? 'var(--accent)' : 'var(--muted)', marginTop: '0.3rem' }}>
 
       {/* ── Controls Bar ── */}
       <div className="analytics-controls">
@@ -255,9 +262,11 @@ export default function Analytics() {
           exportError={exportError}
         />
       </div>
+              color: '#111827',
 
       {/* ── SECTION 1: Key Metrics Cards ── */}
       <KpiGrid kpis={kpis} seriesColors={seriesColors} />
+              color: '#111827',
 
       {/* ── SECTION 2: Performance Charts ── */}
       <PerformanceSection chartProps={analyticsChartProps} showComparison={showComparison} />
@@ -267,6 +276,7 @@ export default function Analytics() {
 
       {/* ── SECTION 4: Behavioral Insights ── */}
       <BehavioralInsightsSection chartData={chartData} seriesColors={seriesColors} />
+                    <div style={{ fontWeight: 700, color: 'var(--accent)' }}>{member.score}%</div>
 
       {/* ── SECTION 5: Capital Flow ── */}
       <CapitalFlowSection seriesColors={seriesColors} />
