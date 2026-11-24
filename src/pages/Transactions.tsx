@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Text } from "../components/Text";
 import { SafeLink } from "../components/SafeLink";
@@ -38,23 +38,42 @@ function TxHashCell({ hash, network }: { hash: string | undefined | null; networ
   );
 }
 
-/** Activity feed across all vaults. */
-export default function Transactions() {
   const { network } = useWallet();
+function useActivityLoader() {
   const [rows, setRows] = useState<VaultActivityRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exportMessage, setExportMessage] = useState<string>("");
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(true);
 
-  const load = () => {
+  const load = useCallback(() => {
+    const reqId = ++requestIdRef.current;
     setError(null);
     listAllActivity()
-      .then((r) => setRows([...r].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())))
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not load activity."));
-  };
+      .then((r) => {
+        if (!mountedRef.current || reqId !== requestIdRef.current) return;
+        setRows([...r].sort((a, b) => +b.timestamp - +a.timestamp));
+      })
+      .catch((e: unknown) => {
+        if (!mountedRef.current || reqId !== requestIdRef.current) return;
+        setError(e instanceof Error ? e.message : "Could not load activity.");
+      });
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+    mountedRef.current = true;
+    load();
+      mountedRef.current = false;
+      requestIdRef.current += 1;
+  }, [load]);
+
+  return { rows, error, load };
+}
+
+/** Activity feed across all vaults. */
+export default function Transactions() {
+  const { rows, error, load } = useActivityLoader();
 
   useOnRecovered(load);
 
