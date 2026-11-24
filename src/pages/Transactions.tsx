@@ -54,14 +54,15 @@ function TxHashCell({ hash, network }: { hash: string | undefined | null; networ
   );
 }
 
-/** Activity feed across all vaults. */
-export default function Transactions() {
   const { network } = useWallet();
+function useActivityLoader() {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = parseTransactionsQuery(searchParams);
   const [rows, setRows] = useState<VaultActivityRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exportMessage, setExportMessage] = useState<string>("");
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(true);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [pageSize, setPageSize] = useState(() => readTransactionsPageSize());
 
